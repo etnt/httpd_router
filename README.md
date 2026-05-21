@@ -1,5 +1,7 @@
 # httpd_router
 
+[![Documentation](https://img.shields.io/badge/docs-online-blue)](https://etnt.github.io/httpd_router/)
+
 A declarative routing module for OTP's built-in `httpd` web server.
 
 `httpd_router` implements the `do/1` callback expected by the `httpd` module
