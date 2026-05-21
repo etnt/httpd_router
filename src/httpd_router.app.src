@@ -1,0 +1,14 @@
+{application, httpd_router,
+ [{description, "A routing module for OTP's httpd web server"},
+  {vsn, "0.1.0"},
+  {registered, [httpd_router_server]},
+  {mod, {httpd_router_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    inets]},
+  {env, []},
+  {modules, []},
+  {licenses, ["Apache-2.0"]},
+  {links, []}
+ ]}.
