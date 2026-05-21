@@ -18,9 +18,11 @@ start_link() ->
 %% @private
 init([]) ->
     Children = [
-        #{id => httpd_router_server,
-          start => {httpd_router_server, start_link, []},
-          restart => permanent,
-          type => worker}
+        #{
+            id => httpd_router_server,
+            start => {httpd_router_server, start_link, []},
+            restart => permanent,
+            type => worker
+        }
     ],
     {ok, {#{strategy => one_for_one, intensity => 5, period => 10}, Children}}.

@@ -13,11 +13,18 @@ start(Port) ->
     {ok, _} = application:ensure_all_started(inets),
     {ok, _} = application:ensure_all_started(httpd_router),
 
-    {ok, _} = httpd_router:start(),
+    %% Create a per-port route table
+    TableName = httpd_router:mk_table_name({127, 0, 0, 1}, Port),
+    {ok, _} = httpd_router:start(TableName),
 
     %% CRUD route: automatically creates GET, POST, PUT, PATCH, DELETE routes
-    httpd_router:add_route("CRUD", "/api/users", fun crud_api:handle_users/1,
-                           [fun crud_api:auth_check/1]),
+    httpd_router:table_add_route(
+        TableName,
+        "CRUD",
+        "/api/users",
+        fun crud_api:handle_users/1,
+        [fun crud_api:auth_check/1]
+    ),
 
     %% Start httpd
     DocRoot = "/tmp/crud_api",
@@ -28,13 +35,17 @@ start(Port) ->
         {server_root, "/tmp"},
         {document_root, DocRoot},
         {bind_address, {127, 0, 0, 1}},
-        {modules, [httpd_router]}
+        {modules, [httpd_router]},
+        {httpd_router_table, TableName}
     ]),
     io:format("CRUD API started on http://127.0.0.1:~p/~n", [Port]),
     io:format("Try:~n"),
     io:format("  curl http://127.0.0.1:~p/api/users~n", [Port]),
     io:format("  curl http://127.0.0.1:~p/api/users/42~n", [Port]),
-    io:format("  curl -is -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Lisa\"}' http://127.0.0.1:~p/api/users~n", [Port]),
+    io:format(
+        "  curl -is -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Lisa\"}' http://127.0.0.1:~p/api/users~n",
+        [Port]
+    ),
     io:format("  curl -X DELETE http://127.0.0.1:~p/api/users/42~n", [Port]),
     io:format("  curl -X OPTIONS http://127.0.0.1:~p/api/users~n", [Port]),
     ok.
@@ -57,34 +68,35 @@ auth_check(Ctx) ->
 %%--------------------------------------------------------------------
 
 handle_users(#{action := index}) ->
-    Users = [#{id => <<"1">>, name => <<"Alice">>},
-             #{id => <<"2">>, name => <<"Bob">>}],
+    Users = [
+        #{id => <<"1">>, name => <<"Alice">>},
+        #{id => <<"2">>, name => <<"Bob">>}
+    ],
     {json, 200, #{users => Users}};
-
 handle_users(#{action := show, params := #{id := Id}}) ->
-    {json, 200, #{id => list_to_binary(Id), name => <<"User ", (list_to_binary(Id))/binary>>}};
-
+    {json, 200, #{
+        id => list_to_binary(Id),
+        name => <<"User ", (list_to_binary(Id))/binary>>
+    }};
 handle_users(#{action := create, body := Body, path := Path}) ->
     %% Parse incoming JSON body
-    User = case Body of
-               <<>> -> #{};
-               _    -> json:decode(Body)
-           end,
+    User =
+        case Body of
+            <<>> -> #{};
+            _ -> json:decode(Body)
+        end,
     %% Simulate generating a new ID
     NewId = integer_to_binary(erlang:unique_integer([positive]) rem 10000),
     Name = maps:get(<<"name">>, User, <<"Anonymous">>),
     Location = iolist_to_binary([Path, "/", NewId]),
-    {json, 201, [{"location", binary_to_list(Location)}],
-     #{id => NewId, name => Name, status => <<"created">>}};
-
+    {json, 201, [{"location", binary_to_list(Location)}], #{
+        id => NewId, name => Name, status => <<"created">>
+    }};
 handle_users(#{action := replace, params := #{id := Id}}) ->
     {json, 200, #{id => list_to_binary(Id), status => <<"replaced">>}};
-
 handle_users(#{action := modify, params := #{id := Id}}) ->
     {json, 200, #{id => list_to_binary(Id), status => <<"modified">>}};
-
 handle_users(#{action := delete, params := #{id := Id}}) ->
     {json, 200, #{id => list_to_binary(Id), status => <<"deleted">>}};
-
 handle_users(_Ctx) ->
     {json, 405, #{error => <<"Method not allowed">>}}.

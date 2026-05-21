@@ -20,6 +20,8 @@ pipeline, providing clean, declarative routing without external dependencies.
 * Configurable fallthrough behaviour (404 or passthrough to next module)
 * Zero external dependencies — pure OTP
 
+See the [examples](examples/EXAMPLES.md) for runnable demo sessions.
+
 ## Build
 
 ```bash
@@ -146,3 +148,20 @@ transport-agnostic:
     ]}}
 ]).
 ```
+
+## Known Limitations
+
+### OPTIONS / CORS Preflight
+
+OTP's `httpd` does not include `OPTIONS` in its hardcoded list of allowed
+HTTP methods (`httpd_request:validate/3`). Requests using `OPTIONS` are
+rejected with `501 Not Implemented` before the module pipeline (and thus
+`httpd_router`) is invoked.
+
+This means automatic CORS preflight handling is not possible with the
+stock `httpd`. Workarounds:
+
+* Place a reverse proxy (e.g. nginx, Caddy) in front that handles
+  OPTIONS/CORS before forwarding to httpd.
+* Use a different HTTP server (e.g. Cowboy) if CORS preflight support
+  is critical.

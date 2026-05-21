@@ -170,9 +170,12 @@ add_route(Method, PathPattern, Handler, Middlewares) ->
 %% Same as {@link add_route/4} but targets a specific route table.
 %% Use when running multiple httpd instances with separate routing.
 %% @end
--spec table_add_route(atom(), string(), string(), function(), [function()]) -> ok.
+-spec table_add_route(atom(), string(), string(), function(), [function()]) ->
+    ok.
 table_add_route(TableName, Method, PathPattern, Handler, Middlewares) ->
-    httpd_router_server:add_route(TableName, Method, PathPattern, Handler, Middlewares).
+    httpd_router_server:add_route(
+        TableName, Method, PathPattern, Handler, Middlewares
+    ).
 
 %% @doc Set an option on the default table.
 %% @see set_option/3
@@ -201,7 +204,9 @@ set_option(TableName, Key, Value) ->
 %% @end
 -spec mk_table_name(inet:ip_address(), inet:port_number()) -> atom().
 mk_table_name(IP, Port) ->
-    list_to_atom("httpd_routes_" ++ inet:ntoa(IP) ++ "_" ++ integer_to_list(Port)).
+    list_to_atom(
+        "httpd_routes_" ++ inet:ntoa(IP) ++ "_" ++ integer_to_list(Port)
+    ).
 
 %%--------------------------------------------------------------------
 %% Route printing
@@ -214,7 +219,9 @@ mk_table_name(IP, Port) ->
 -spec print_routes() -> ok.
 print_routes() ->
     {ok, Tables} = httpd_router_server:get_tables(),
-    lists:foreach(fun({TableName, _Opts}) -> print_routes(TableName) end, Tables).
+    lists:foreach(
+        fun({TableName, _Opts}) -> print_routes(TableName) end, Tables
+    ).
 
 %% @doc Print all routes from a specific table to stdout.
 %% @end
@@ -222,21 +229,44 @@ print_routes() ->
 print_routes(TableName) ->
     Routes = ets:tab2list(TableName),
     io:format("~n>>> TABLE(~w)~n", [TableName]),
-    io:format("~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
-              ["METHOD", "PATH PATTERN", "CRUD", "ACTION", "HANDLER"]),
-    io:format("~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
-              ["------", "------------", "----", "------", "-------"]),
+    io:format(
+        "~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
+        ["METHOD", "PATH PATTERN", "CRUD", "ACTION", "HANDLER"]
+    ),
+    io:format(
+        "~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
+        ["------", "------------", "----", "------", "-------"]
+    ),
     Sorted = lists:keysort(#route.path_pattern, Routes),
     lists:foreach(fun print_route/1, Sorted),
     ok.
 
-print_route(#route{method = Method, path_pattern = PP, handler = Handler,
-                   action = Action, crud = Crud}) ->
-    CrudStr = case Crud of undefined -> "-"; _ -> Crud end,
-    ActionStr = case Action of undefined -> "-"; _ -> atom_to_list(Action) end,
-    HandlerStr = case Handler of undefined -> "-"; _ -> io_lib:format("~w", [Handler]) end,
-    io:format("~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
-              [Method, PP, CrudStr, ActionStr, HandlerStr]).
+print_route(#route{
+    method = Method,
+    path_pattern = PP,
+    handler = Handler,
+    action = Action,
+    crud = Crud
+}) ->
+    CrudStr =
+        case Crud of
+            undefined -> "-";
+            _ -> Crud
+        end,
+    ActionStr =
+        case Action of
+            undefined -> "-";
+            _ -> atom_to_list(Action)
+        end,
+    HandlerStr =
+        case Handler of
+            undefined -> "-";
+            _ -> io_lib:format("~w", [Handler])
+        end,
+    io:format(
+        "~-8.s ~-40.s ~-5.s ~-9.s ~s~n",
+        [Method, PP, CrudStr, ActionStr, HandlerStr]
+    ).
 
 %%--------------------------------------------------------------------
 %% httpd callback: do/1
@@ -253,8 +283,15 @@ print_route(#route{method = Method, path_pattern = PP, handler = Handler,
 %% `httpd_router' in the `{modules, [...]}' list of your httpd
 %% configuration.
 %% @end
-do(#mod{method = MethodStr, request_uri = RequestURI,
-        entity_body = Body, parsed_header = Headers, data = Data} = ModData) ->
+do(
+    #mod{
+        method = MethodStr,
+        request_uri = RequestURI,
+        entity_body = Body,
+        parsed_header = Headers,
+        data = Data
+    } = ModData
+) ->
     %% Check if already handled by another module
     case proplists:get_value(response, Data) of
         undefined ->
@@ -265,10 +302,22 @@ do(#mod{method = MethodStr, request_uri = RequestURI,
                 {ok, #route{action = options, crud = Crud}} ->
                     Response = build_options_response(Crud),
                     send_response(ModData, Response);
-                {ok, #route{handler = Handler, middlewares = Middlewares,
-                            params = Params, action = Action}} ->
-                    Ctx = build_ctx(ModData, Method, Path, QueryStr, Body,
-                                    Headers, Params, Action),
+                {ok, #route{
+                    handler = Handler,
+                    middlewares = Middlewares,
+                    params = Params,
+                    action = Action
+                }} ->
+                    Ctx = build_ctx(
+                        ModData,
+                        Method,
+                        Path,
+                        QueryStr,
+                        Body,
+                        Headers,
+                        Params,
+                        Action
+                    ),
                     case execute_middlewares(Middlewares, Ctx) of
                         {ok, FinalCtx} ->
                             try
@@ -276,11 +325,15 @@ do(#mod{method = MethodStr, request_uri = RequestURI,
                                 send_response(ModData, Response)
                             catch
                                 Class:Error:Stack ->
-                                    ErrMsg = io_lib:format("~p:~p~n~p",
-                                                          [Class, Error, Stack]),
-                                    send_response(ModData,
-                                                  {text, 500, "text/plain",
-                                                   iolist_to_binary(ErrMsg)})
+                                    ErrMsg = io_lib:format(
+                                        "~p:~p~n~p",
+                                        [Class, Error, Stack]
+                                    ),
+                                    send_response(
+                                        ModData,
+                                        {text, 500, "text/plain",
+                                            iolist_to_binary(ErrMsg)}
+                                    )
                             end;
                         {error, ErrorResponse} ->
                             send_response(ModData, ErrorResponse)
@@ -320,7 +373,9 @@ match_path(Pattern, Path) ->
 match_segments([], [], Params) ->
     {true, Params};
 match_segments([[$: | ParamName] | RestPattern], [Value | RestPath], Params) ->
-    match_segments(RestPattern, RestPath, Params#{list_to_atom(ParamName) => Value});
+    match_segments(RestPattern, RestPath, Params#{
+        list_to_atom(ParamName) => Value
+    });
 match_segments([Same | RestPattern], [Same | RestPath], Params) ->
     match_segments(RestPattern, RestPath, Params);
 match_segments(_, _, _) ->
@@ -371,8 +426,10 @@ execute_middlewares([Middleware | Rest], Ctx) ->
             Error
     catch
         Class:Error:Stack ->
-            ErrMsg = io_lib:format("Middleware error: ~p:~p~n~p",
-                                   [Class, Error, Stack]),
+            ErrMsg = io_lib:format(
+                "Middleware error: ~p:~p~n~p",
+                [Class, Error, Stack]
+            ),
             {error, {text, 500, "text/plain", iolist_to_binary(ErrMsg)}}
     end.
 
@@ -383,10 +440,12 @@ execute_middlewares([Middleware | Rest], Ctx) ->
 build_ctx(ModData, Method, Path, QueryStr, Body, Headers, Params, Action) ->
     Query = parse_query(QueryStr),
     HeaderMap = maps:from_list([{string:lowercase(K), V} || {K, V} <- Headers]),
-    BodyBin = if is_list(Body) -> list_to_binary(Body);
-                 is_binary(Body) -> Body;
-                 true -> <<>>
-              end,
+    BodyBin =
+        if
+            is_list(Body) -> list_to_binary(Body);
+            is_binary(Body) -> Body;
+            true -> <<>>
+        end,
     Ctx = #{
         mod => ModData,
         method => list_to_binary(Method),
@@ -402,18 +461,23 @@ build_ctx(ModData, Method, Path, QueryStr, Body, Headers, Params, Action) ->
         _ -> Ctx#{action => Action}
     end.
 
-parse_query("") -> #{};
+parse_query("") ->
+    #{};
 parse_query(QueryStr) ->
     Pairs = string:split(QueryStr, "&", all),
     maps:from_list(
-      lists:filtermap(
-        fun(Pair) ->
+        lists:filtermap(
+            fun(Pair) ->
                 case string:split(Pair, "=") of
                     [Key, Val] ->
                         {true, {list_to_binary(Key), list_to_binary(Val)}};
-                    _ -> false
+                    _ ->
+                        false
                 end
-        end, Pairs)).
+            end,
+            Pairs
+        )
+    ).
 
 %%--------------------------------------------------------------------
 %% Response translation
@@ -446,7 +510,9 @@ send_response(#mod{data = Data} = ModData, {stream, Code, Headers, StreamFun}) -
     BodySize = 0,
     {proceed, [{response, {already_sent, Code, BodySize}} | Data]};
 send_response(ModData, _Other) ->
-    send_final(ModData, 500, [{"content-type", "text/plain"}], "Internal Server Error").
+    send_final(
+        ModData, 500, [{"content-type", "text/plain"}], "Internal Server Error"
+    ).
 
 send_final(#mod{data = Data}, Code, Headers, Body) ->
     %% httpd expects: {response, {response, HeaderProplist, Body}}
@@ -460,8 +526,11 @@ send_final(#mod{data = Data}, Code, Headers, Body) ->
 send_stream_headers(SocketType, Socket, Code, Headers) ->
     StatusLine = io_lib:format("HTTP/1.1 ~B ~s\r\n", [Code, reason_phrase(Code)]),
     HeaderLines = [[K, ": ", V, "\r\n"] || {K, V} <- Headers],
-    httpd_socket:deliver(SocketType, Socket,
-                         [StatusLine, HeaderLines, "\r\n"]).
+    httpd_socket:deliver(
+        SocketType,
+        Socket,
+        [StatusLine, HeaderLines, "\r\n"]
+    ).
 
 %%--------------------------------------------------------------------
 %% OPTIONS / CORS handling
@@ -469,17 +538,23 @@ send_stream_headers(SocketType, Socket, Code, Headers) ->
 
 build_options_response(Crud) when is_list(Crud) ->
     Methods = build_allow_methods(Crud),
-    {headers, 204, [{"allow", Methods},
-                    {"access-control-allow-origin", "*"},
-                    {"access-control-allow-methods", Methods}]}.
+    {headers, 204, [
+        {"allow", Methods},
+        {"access-control-allow-origin", "*"},
+        {"access-control-allow-methods", Methods}
+    ]}.
 
 build_allow_methods(Crud) ->
-    MethodList = lists:flatmap(
-        fun($C) -> ["POST"];
-           ($R) -> ["GET"];
-           ($U) -> ["PUT", "PATCH"];
-           ($D) -> ["DELETE"]
-        end, Crud) ++ ["OPTIONS"],
+    MethodList =
+        lists:flatmap(
+            fun
+                ($C) -> ["POST"];
+                ($R) -> ["GET"];
+                ($U) -> ["PUT", "PATCH"];
+                ($D) -> ["DELETE"]
+            end,
+            Crud
+        ) ++ ["OPTIONS"],
     string:join(MethodList, ", ").
 
 %%--------------------------------------------------------------------
