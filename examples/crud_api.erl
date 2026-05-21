@@ -10,8 +10,8 @@ start() ->
 
 %% @doc Start the CRUD API on a given port.
 start(Port) ->
-    ok = application:ensure_all_started(inets),
-    ok = application:ensure_all_started(httpd_router),
+    {ok, _} = application:ensure_all_started(inets),
+    {ok, _} = application:ensure_all_started(httpd_router),
 
     {ok, _} = httpd_router:start(),
 
@@ -34,7 +34,7 @@ start(Port) ->
     io:format("Try:~n"),
     io:format("  curl http://127.0.0.1:~p/api/users~n", [Port]),
     io:format("  curl http://127.0.0.1:~p/api/users/42~n", [Port]),
-    io:format("  curl -X POST http://127.0.0.1:~p/api/users~n", [Port]),
+    io:format("  curl -is -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Lisa\"}' http://127.0.0.1:~p/api/users~n", [Port]),
     io:format("  curl -X DELETE http://127.0.0.1:~p/api/users/42~n", [Port]),
     io:format("  curl -X OPTIONS http://127.0.0.1:~p/api/users~n", [Port]),
     ok.
@@ -64,8 +64,18 @@ handle_users(#{action := index}) ->
 handle_users(#{action := show, params := #{id := Id}}) ->
     {json, 200, #{id => list_to_binary(Id), name => <<"User ", (list_to_binary(Id))/binary>>}};
 
-handle_users(#{action := create}) ->
-    {json, 201, #{id => <<"3">>, name => <<"New User">>, status => <<"created">>}};
+handle_users(#{action := create, body := Body, path := Path}) ->
+    %% Parse incoming JSON body
+    User = case Body of
+               <<>> -> #{};
+               _    -> json:decode(Body)
+           end,
+    %% Simulate generating a new ID
+    NewId = integer_to_binary(erlang:unique_integer([positive]) rem 10000),
+    Name = maps:get(<<"name">>, User, <<"Anonymous">>),
+    Location = iolist_to_binary([Path, "/", NewId]),
+    {json, 201, [{"location", binary_to_list(Location)}],
+     #{id => NewId, name => Name, status => <<"created">>}};
 
 handle_users(#{action := replace, params := #{id := Id}}) ->
     {json, 200, #{id => list_to_binary(Id), status => <<"replaced">>}};

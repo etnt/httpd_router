@@ -32,8 +32,8 @@ make shell    # Start interactive shell
 ## Quick Start
 
 ```erlang
-ok = application:ensure_all_started(inets),
-ok = application:ensure_all_started(httpd_router),
+{ok, _} = application:ensure_all_started(inets),
+{ok, _} = application:ensure_all_started(httpd_router),
 {ok, _} = httpd_router:start(),
 
 %% Register routes

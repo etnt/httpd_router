@@ -21,8 +21,8 @@
 %%% == Quick Start ==
 %%%
 %%% ```
-%%% ok = application:ensure_all_started(inets),
-%%% ok = application:ensure_all_started(httpd_router),
+%%% {ok, _} = application:ensure_all_started(inets),
+%%% {ok, _} = application:ensure_all_started(httpd_router),
 %%% {ok, _} = httpd_router:start(),
 %%% httpd_router:add_route("GET", "/hello", fun my_handler:hello/1),
 %%% httpd_router:add_route("GET", "/user/:id", fun my_handler:user/1),
@@ -383,13 +383,17 @@ execute_middlewares([Middleware | Rest], Ctx) ->
 build_ctx(ModData, Method, Path, QueryStr, Body, Headers, Params, Action) ->
     Query = parse_query(QueryStr),
     HeaderMap = maps:from_list([{string:lowercase(K), V} || {K, V} <- Headers]),
+    BodyBin = if is_list(Body) -> list_to_binary(Body);
+                 is_binary(Body) -> Body;
+                 true -> <<>>
+              end,
     Ctx = #{
         mod => ModData,
         method => list_to_binary(Method),
         path => Path,
         params => Params,
         query => Query,
-        body => Body,
+        body => BodyBin,
         headers => HeaderMap,
         opaque => #{}
     },

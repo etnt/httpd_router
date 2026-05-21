@@ -14,8 +14,8 @@ start() ->
 
 %% @doc Start the simple API on a given port.
 start(Port) ->
-    ok = application:ensure_all_started(inets),
-    ok = application:ensure_all_started(httpd_router),
+    {ok, _} = application:ensure_all_started(inets),
+    {ok, _} = application:ensure_all_started(httpd_router),
 
     {ok, _} = httpd_router:start(),
 
@@ -36,6 +36,11 @@ start(Port) ->
         {modules, [httpd_router]}
     ]),
     io:format("Simple API started on http://127.0.0.1:~p/~n", [Port]),
+    io:format("Try:~n"),
+    io:format("  curl http://127.0.0.1:~p/~n", [Port]),
+    io:format("  curl http://127.0.0.1:~p/hello~n", [Port]),
+    io:format("  curl http://127.0.0.1:~p/hello?name=Erlang~n", [Port]),
+    io:format("  curl http://127.0.0.1:~p/user/42~n", [Port]),
     ok.
 
 %% @doc Stop the API server.
