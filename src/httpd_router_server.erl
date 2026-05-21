@@ -254,11 +254,13 @@ add_crud_routes(TableName, Crud, PathPattern, Handler, Middlewares) ->
                 )
         end,
         Crud
-    ).
-%% NOTE: OPTIONS routes are not registered because OTP's httpd
-%% rejects OPTIONS requests with 501 before the module pipeline
-%% is invoked (httpd_request:validate/3 does not include OPTIONS
-%% in its hardcoded list of allowed methods).
+    ),
+    %% Add OPTIONS handler for CRUD routes (requires OTP patch for
+    %% httpd_request:validate/3 to include "OPTIONS").
+    insert_route(
+        TableName, "OPTIONS", PathPattern, undefined, [], Crud, options
+    ),
+    insert_route(TableName, "OPTIONS", IdPattern, undefined, [], Crud, options).
 
 is_crud(Method) ->
     lists:all(fun(C) -> lists:member(C, "CRUD") end, Method) andalso

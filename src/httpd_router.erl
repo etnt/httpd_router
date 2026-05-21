@@ -300,7 +300,7 @@ do(
             TableName = get_table_name(ModData),
             case find_route(Method, Path, TableName) of
                 {ok, #route{action = options, crud = Crud}} ->
-                    Response = build_options_response(Crud),
+                    Response = build_options_response(Crud, TableName),
                     send_response(ModData, Response);
                 {ok, #route{
                     handler = Handler,
@@ -339,7 +339,12 @@ do(
                             send_response(ModData, ErrorResponse)
                     end;
                 not_found ->
-                    handle_not_found(ModData, TableName)
+                    case Method of
+                        "OPTIONS" ->
+                            handle_auto_options(ModData, Path, TableName);
+                        _ ->
+                            handle_not_found(ModData, TableName)
+                    end
             end;
         _ ->
             {proceed, Data}
@@ -536,12 +541,12 @@ send_stream_headers(SocketType, Socket, Code, Headers) ->
 %% OPTIONS / CORS handling
 %%--------------------------------------------------------------------
 
-build_options_response(Crud) when is_list(Crud) ->
+build_options_response(Crud, TableName) when is_list(Crud) ->
     Methods = build_allow_methods(Crud),
     {headers, 204, [
         {"allow", Methods},
-        {"access-control-allow-origin", "*"},
         {"access-control-allow-methods", Methods}
+        | cors_headers(TableName)
     ]}.
 
 build_allow_methods(Crud) ->
@@ -556,6 +561,24 @@ build_allow_methods(Crud) ->
             Crud
         ) ++ ["OPTIONS"],
     string:join(MethodList, ", ").
+
+%% @doc Build CORS headers from table options.
+%% Reads the `cors' key from the table options map. Supported keys:
+%% `allow_origin', `allow_headers', `max_age'. Falls back to sensible
+%% defaults if not configured.
+cors_headers(TableName) ->
+    Cors = case httpd_router_server:get_options(TableName) of
+        {ok, #{cors := C}} when is_map(C) -> C;
+        _ -> #{}
+    end,
+    Origin = maps:get(allow_origin, Cors, "*"),
+    AllowH = maps:get(allow_headers, Cors, "Content-Type, Authorization"),
+    MaxAge = maps:get(max_age, Cors, "86400"),
+    [
+        {"access-control-allow-origin", Origin},
+        {"access-control-allow-headers", AllowH},
+        {"access-control-max-age", MaxAge}
+    ].
 
 %%--------------------------------------------------------------------
 %% Internal helpers
@@ -579,6 +602,23 @@ handle_not_found(#mod{data = Data} = ModData, TableName) ->
             {proceed, Data};
         _ ->
             send_response(ModData, {text, 404, "text/plain", "Not Found"})
+    end.
+
+handle_auto_options(ModData, Path, TableName) ->
+    Routes = ets:tab2list(TableName),
+    MatchingMethods = [M || #route{method = M, path_pattern = PP} <- Routes,
+                            M =/= "OPTIONS",
+                            match_path(PP, Path) =/= false],
+    case MatchingMethods of
+        [] ->
+            handle_not_found(ModData, TableName);
+        _ ->
+            Methods = string:join(lists:usort(MatchingMethods) ++ ["OPTIONS"], ", "),
+            send_response(ModData, {headers, 204, [
+                {"allow", Methods},
+                {"access-control-allow-methods", Methods}
+                | cors_headers(TableName)
+            ]})
     end.
 
 ensure_started() ->

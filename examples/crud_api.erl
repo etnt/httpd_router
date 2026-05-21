@@ -13,9 +13,15 @@ start(Port) ->
     {ok, _} = application:ensure_all_started(inets),
     {ok, _} = application:ensure_all_started(httpd_router),
 
-    %% Create a per-port route table
+    %% Create a per-port route table with custom CORS configuration
     TableName = httpd_router:mk_table_name({127, 0, 0, 1}, Port),
-    {ok, _} = httpd_router:start(TableName),
+    {ok, _} = httpd_router:start(TableName, #{
+        cors => #{
+            allow_origin => "https://myapp.example.com",
+            allow_headers => "Content-Type, Authorization, X-Request-ID",
+            max_age => "3600"
+        }
+    }),
 
     %% CRUD route: automatically creates GET, POST, PUT, PATCH, DELETE routes
     httpd_router:table_add_route(
@@ -47,7 +53,14 @@ start(Port) ->
         [Port]
     ),
     io:format("  curl -X DELETE http://127.0.0.1:~p/api/users/42~n", [Port]),
-    io:format("  curl -X OPTIONS http://127.0.0.1:~p/api/users~n", [Port]),
+    io:format("~n  CORS preflight:~n"),
+    io:format(
+        "  curl -is -X OPTIONS -H 'Origin: http://example.com' "
+        "-H 'Access-Control-Request-Method: POST' "
+        "-H 'Access-Control-Request-Headers: Content-Type' "
+        "http://127.0.0.1:~p/api/users~n",
+        [Port]
+    ),
     ok.
 
 %% @doc Stop the API server.

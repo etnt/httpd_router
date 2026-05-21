@@ -147,7 +147,13 @@ crud_expansion_test_() ->
                 {ok, R6} = httpd_router:find_route(
                     "DELETE", "/items/1", TableName
                 ),
-                ?assertEqual(delete, R6#route.action)
+                ?assertEqual(delete, R6#route.action),
+
+                %% OPTIONS
+                {ok, R7} = httpd_router:find_route(
+                    "OPTIONS", "/items", TableName
+                ),
+                ?assertEqual(options, R7#route.action)
             end},
             {"partial CRUD: CR only", fun() ->
                 TableName = test_routes_cr,
@@ -306,6 +312,115 @@ options_test_() ->
                 }),
                 {ok, Opts} = httpd_router_server:get_options(TableName),
                 ?assertEqual(passthrough, maps:get(no_match, Opts))
+            end},
+            {"cors config overrides defaults", fun() ->
+                TableName = test_routes_cors,
+                {ok, _} = httpd_router_server:create_table(TableName, #{
+                    cors => #{
+                        allow_origin => "https://example.com",
+                        allow_headers => "X-Custom",
+                        max_age => "600"
+                    }
+                }),
+                httpd_router:table_add_route(
+                    TableName, "GET", "/stuff", fun(_) -> {text, 200, "text/plain", "ok"} end, []
+                ),
+                %% Simulate what cors_headers/1 returns
+                {ok, #{cors := Cors}} = httpd_router_server:get_options(TableName),
+                ?assertEqual("https://example.com", maps:get(allow_origin, Cors)),
+                ?assertEqual("X-Custom", maps:get(allow_headers, Cors)),
+                ?assertEqual("600", maps:get(max_age, Cors))
             end}
         ]
     end}.
+
+%%--------------------------------------------------------------------
+%% OPTIONS / CORS round-trip test
+%% Requires the OTP patch for httpd_request:validate/3 to accept OPTIONS.
+%%--------------------------------------------------------------------
+
+options_roundtrip_test_() ->
+    {setup,
+        fun() ->
+            %% Skip if OPTIONS is not supported by this OTP build
+            case httpd_request:validate("OPTIONS", "/test", "HTTP/1.1") of
+                {ok, _} -> ok;
+                _ -> throw({skip, "OTP httpd does not support OPTIONS"})
+            end,
+            application:ensure_all_started(inets),
+            application:ensure_all_started(httpd_router),
+            {ok, _} = httpd_router_server:create_table(httpd_options_routes),
+            httpd_router:table_add_route(
+                httpd_options_routes,
+                "CRUD",
+                "/api/items",
+                fun(#{action := index}) -> {json, 200, #{items => []}} end,
+                []
+            ),
+            DocRoot = "/tmp/httpd_router_options_test",
+            filelib:ensure_dir(DocRoot ++ "/x"),
+            {ok, Pid} = inets:start(httpd, [
+                {port, 0},
+                {server_name, "options_test"},
+                {server_root, "/tmp"},
+                {document_root, DocRoot},
+                {bind_address, {127, 0, 0, 1}},
+                {modules, [httpd_router]},
+                {httpd_router_table, httpd_options_routes}
+            ]),
+            Info = httpd:info(Pid),
+            Port = proplists:get_value(port, Info),
+            {Pid, Port}
+        end,
+        fun({Pid, _Port}) ->
+            inets:stop(httpd, Pid),
+            application:stop(httpd_router)
+        end,
+        fun({_Pid, Port}) ->
+            BaseUrl = "http://127.0.0.1:" ++ integer_to_list(Port),
+            [
+                {"OPTIONS /api/items returns 204 with Allow header", fun() ->
+                    {ok, {{_, 204, _}, Headers, _Body}} =
+                        httpc:request(
+                            options,
+                            {BaseUrl ++ "/api/items", []},
+                            [{timeout, 2000}],
+                            []
+                        ),
+                    Allow = proplists:get_value("allow", Headers, ""),
+                    ?assert(string:find(Allow, "GET") =/= nomatch),
+                    ?assert(string:find(Allow, "POST") =/= nomatch),
+                    ?assert(string:find(Allow, "PUT") =/= nomatch),
+                    ?assert(string:find(Allow, "DELETE") =/= nomatch),
+                    ?assert(string:find(Allow, "OPTIONS") =/= nomatch)
+                end},
+                {"OPTIONS /api/items returns CORS headers", fun() ->
+                    {ok, {{_, 204, _}, Headers, _Body}} =
+                        httpc:request(
+                            options,
+                            {BaseUrl ++ "/api/items", []},
+                            [{timeout, 2000}],
+                            []
+                        ),
+                    ?assertMatch(
+                        "*",
+                        proplists:get_value(
+                            "access-control-allow-origin", Headers
+                        )
+                    ),
+                    AcMethods = proplists:get_value(
+                        "access-control-allow-methods", Headers, ""
+                    ),
+                    ?assert(string:find(AcMethods, "GET") =/= nomatch)
+                end},
+                {"OPTIONS /api/items/:id also works", fun() ->
+                    {ok, {{_, 204, _}, _Headers, _Body}} =
+                        httpc:request(
+                            options,
+                            {BaseUrl ++ "/api/items/42", []},
+                            [{timeout, 2000}],
+                            []
+                        )
+                end}
+            ]
+        end}.

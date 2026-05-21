@@ -46,6 +46,28 @@ $ curl -X DELETE http://127.0.0.1:9292/api/users/42
 {"id":"42","status":"deleted"}
 ```
 
+#### CORS Preflight
+
+```bash
+$ curl -is -X OPTIONS \
+  -H 'Origin: http://example.com' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: Content-Type' \
+  http://127.0.0.1:9292/api/users
+HTTP/1.1 204 No Content
+Date: Thu, 21 May 2026 08:42:00 GMT
+Server: inets/9.6.2
+Allow: POST, GET, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, GET, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 86400
+```
+
+> **Note:** OPTIONS support requires the OTP patch for
+> `httpd_request:validate/3` (see the Known Limitations section in
+> the main README).
+
 ### Simple API
 
 ```erlang
