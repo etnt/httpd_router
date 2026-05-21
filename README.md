@@ -1,6 +1,7 @@
 # httpd_router
 
 [![Documentation](https://img.shields.io/badge/docs-online-blue)](https://etnt.github.io/httpd_router/)
+[![Tests](https://github.com/etnt/httpd_router/actions/workflows/tests.yml/badge.svg)](https://github.com/etnt/httpd_router/actions/workflows/tests.yml)
 
 A declarative routing module for OTP's built-in `httpd` web server.
 
