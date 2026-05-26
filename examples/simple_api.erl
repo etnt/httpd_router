@@ -41,6 +41,7 @@ start(Port) ->
         {server_root, "/tmp"},
         {document_root, DocRoot},
         {bind_address, {127, 0, 0, 1}},
+        {socket_type, {ip_comm, [{nodelay, true}]}},
         {modules, [httpd_router]},
         {httpd_router_table, TableName}
     ]),

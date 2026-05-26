@@ -32,6 +32,7 @@
 %%%     {server_root, "/tmp"},
 %%%     {document_root, "/tmp/my_api"},
 %%%     {bind_address, {127,0,0,1}},
+%%%     {socket_type, {ip_comm, [{nodelay, true}]}},
 %%%     {modules, [httpd_router]}
 %%% ]).
 %%% '''
@@ -389,18 +390,26 @@ match_segments(_, _, _) ->
 %% @end
 -spec find_route(string(), string(), atom()) -> {ok, #route{}} | not_found.
 find_route(Method, Path, TableName) ->
-    Routes = ets:tab2list(TableName),
-    MethodRoutes = [R || #route{method = M} = R <- Routes, M =:= Method],
-    find_matching(MethodRoutes, Path).
+    MethodRoutes = ets:lookup(TableName, Method),
+    PathSegments = string:split(Path, "/", all),
+    SegCount = length(PathSegments),
+    find_matching(MethodRoutes, PathSegments, SegCount).
 
-find_matching([], _Path) ->
+find_matching([], _PathSegments, _SegCount) ->
     not_found;
-find_matching([#route{path_pattern = PP} = Route | Rest], Path) ->
-    case match_path(PP, Path) of
+find_matching(
+    [#route{segment_count = SC} | Rest], PathSegments, SegCount
+) when SC =/= SegCount ->
+    %% Fast reject: different segment count.
+    find_matching(Rest, PathSegments, SegCount);
+find_matching(
+    [#route{path_segments = PatSegs} = Route | Rest], PathSegments, SegCount
+) ->
+    case match_segments(PatSegs, PathSegments, #{}) of
         {true, Params} ->
             {ok, Route#route{params = Params}};
         false ->
-            find_matching(Rest, Path)
+            find_matching(Rest, PathSegments, SegCount)
     end.
 
 %%--------------------------------------------------------------------

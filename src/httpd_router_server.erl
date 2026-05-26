@@ -108,7 +108,7 @@ handle_call(
     case lists:keyfind(TableName, 1, Tables) of
         false ->
             ets:new(TableName, [
-                named_table, protected, bag, {keypos, #route.key}
+                named_table, protected, bag, {keypos, #route.method}
             ]),
             {reply, {ok, TableName}, State#state{
                 tables = [{TableName, Options} | Tables]
@@ -178,10 +178,12 @@ terminate(_Reason, _State) ->
 insert_route(
     TableName, Method, PathPattern, Handler, Middlewares, Crud, Action
 ) ->
+    Segments = string:split(PathPattern, "/", all),
     Route = #route{
-        key = {Method, PathPattern},
         method = Method,
         path_pattern = PathPattern,
+        path_segments = Segments,
+        segment_count = length(Segments),
         handler = Handler,
         middlewares = Middlewares,
         crud = Crud,

@@ -235,6 +235,7 @@ http_roundtrip_test_() ->
                 {server_root, "/tmp"},
                 {document_root, DocRoot},
                 {bind_address, {127, 0, 0, 1}},
+                {socket_type, {ip_comm, [{nodelay, true}]}},
                 {modules, [httpd_router]},
                 {httpd_router_table, httpd_roundtrip_routes}
             ]),
@@ -309,3 +310,102 @@ options_test_() ->
             end}
         ]
     end}.
+
+%%--------------------------------------------------------------------
+%% Routing performance benchmark (for manual branch comparison)
+%%--------------------------------------------------------------------
+
+route_lookup_perf_test_() ->
+    {setup, fun setup/0, fun cleanup/1, fun(_) ->
+        [
+            {"benchmark route lookup with 100 routes", fun() ->
+                TableName = test_routes_perf_100,
+                Iterations = 20000,
+                Handler = fun(_Ctx) -> {status, 200} end,
+
+                {ok, _} = httpd_router_server:create_table(TableName),
+                register_perf_routes(TableName, Handler),
+
+                %% Sanity checks before timing.
+                {ok, _} = httpd_router:find_route(
+                    "GET", "/bench/get/25", TableName
+                ),
+                not_found = httpd_router:find_route(
+                    "GET", "/bench/get/does-not-exist", TableName
+                ),
+
+                HitUs = benchmark_route_lookup(
+                    TableName,
+                    Iterations,
+                    "GET",
+                    "/bench/get/25"
+                ),
+                MissUs = benchmark_route_lookup(
+                    TableName,
+                    Iterations,
+                    "GET",
+                    "/bench/get/does-not-exist"
+                ),
+
+                error_logger:info_msg(
+                    "PERF route_lookup_hit routes=100 iterations=~p total_us=~p avg_us=~p~n",
+                    [Iterations, HitUs, HitUs div Iterations]
+                ),
+                error_logger:info_msg(
+                    "PERF route_lookup_miss routes=100 iterations=~p total_us=~p avg_us=~p~n",
+                    [Iterations, MissUs, MissUs div Iterations]
+                )
+            end}
+        ]
+    end}.
+
+register_perf_routes(TableName, Handler) ->
+    lists:foreach(
+        fun(I) ->
+            GetPath = "/bench/get/" ++ integer_to_list(I),
+            PostPath = "/bench/post/" ++ integer_to_list(I),
+            PutPath = "/bench/put/" ++ integer_to_list(I),
+            DeletePath = "/bench/delete/" ++ integer_to_list(I),
+            ok = httpd_router_server:add_route(
+                TableName,
+                "GET",
+                GetPath,
+                Handler,
+                []
+            ),
+            ok = httpd_router_server:add_route(
+                TableName,
+                "POST",
+                PostPath,
+                Handler,
+                []
+            ),
+            ok = httpd_router_server:add_route(
+                TableName,
+                "PUT",
+                PutPath,
+                Handler,
+                []
+            ),
+            ok = httpd_router_server:add_route(
+                TableName,
+                "DELETE",
+                DeletePath,
+                Handler,
+                []
+            )
+        end,
+        lists:seq(1, 25)
+    ).
+
+benchmark_route_lookup(TableName, Iterations, Method, Path) ->
+    {TotalUs, ok} = timer:tc(fun() ->
+        benchmark_route_lookup_loop(Iterations, TableName, Method, Path)
+    end),
+    TotalUs.
+
+benchmark_route_lookup_loop(0, _TableName, _Method, _Path) ->
+    ok;
+benchmark_route_lookup_loop(N, TableName, Method, Path) ->
+    _ = httpd_router:find_route(Method, Path, TableName),
+    benchmark_route_lookup_loop(N - 1, TableName, Method, Path).

@@ -52,9 +52,13 @@ filelib:ensure_dir(DocRoot ++ "/x"),
     {server_root, "/tmp"},
     {document_root, DocRoot},
     {bind_address, {127,0,0,1}},
+    {socket_type, {ip_comm, [{nodelay, true}]}},
     {modules, [httpd_router]}
 ]).
 ```
+
+For low-latency keep-alive traffic (especially on loopback),
+`{nodelay, true}` avoids Nagle delays and typically improves request throughput.
 
 ## Handler Functions
 
